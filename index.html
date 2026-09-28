@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Financeiro Preditivo AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #2563EB;
+            --bg: #F3F4F6;
+            --card: #FFFFFF;
+            --text: #1F2937;
+            --success: #059669;
+            --danger: #DC2626;
+            --warning: #F59E0B;
+            --border: #E5E7EB;
+        }
+        * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 0; }
+        body { background-color: var(--bg); color: var(--text); padding: 20px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1, h2, h3 { margin-bottom: 15px; color: var(--text); }
+        
+        /* Grid de Resumo */
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .summary-card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .summary-card h3 { font-size: 13px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+        .summary-card .value { font-size: 24px; font-weight: bold; }
+        .text-success { color: var(--success); }
+        .text-danger { color: var(--danger); }
+        .text-warning { color: var(--warning); }
+
+        /* Layout Principal */
+        .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 25px; }
+        @media (max-width: 800px) { .main-grid { grid-template-columns: 1fr; } }
+        .panel { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+        /* Formulários e Botões */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        input, select, button { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+        .full-width { grid-column: span 2; }
+        button { background-color: var(--primary); color: white; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; margin-top: 5px;}
+        button:hover { opacity: 0.9; }
+        .btn-ia { background-color: #10B981; font-size: 16px; padding: 15px; }
+
+        /* Histórico */
+        .transacao { display: grid; grid-template-columns: auto 1fr auto; gap: 15px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .transacao:last-child { border-bottom: none; }
+        .t-data { font-size: 12px; color: #6B7280; text-align: center; background: #F3F4F6; padding: 8px; border-radius: 8px; min-width: 60px;}
+        .t-info strong { display: block; margin-bottom: 4px; }
+        .t-badges span { font-size: 11px; padding: 3px 8px; border-radius: 12px; margin-right: 5px; font-weight: 600; }
+        .badge-cat { background: #E0E7FF; color: #3730A3; }
+        .badge-fixo { background: #FEE2E2; color: #991B1B; }
+        .badge-var { background: #FEF3C7; color: #92400E; }
+        
+        /* Área da IA */
+        #resultado-ia { white-space: pre-wrap; line-height: 1.6; font-size: 15px; background: #F8FAFC; padding: 20px; border-radius: 8px; display: none; border-left: 4px solid #10B981; }
+        .loader { display: none; text-align: center; color: #6B7280; padding: 20px; font-weight: bold; }
+        
+        /* Gráfico */
+        .chart-container { position: relative; height: 300px; width: 100%; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 style="text-align: center; margin-bottom: 30px;">Dashboard Financeiro Preditivo</h1>
+
+    <!-- Cartões de Resumo Segregados -->
+    <div class="summary-grid">
+        <div class="summary-card">
+            <h3>Saldo Atual</h3>
+            <div class="value" id="res-saldo">R$ 0,00</div>
+        </div>
+        <div class="summary-card">
+            <h3>Receitas</h3>
+            <div class="value text-success" id="res-receitas">R$ 0,00</div>
+        </div>
+        <div class="summary-card">
+            <h3>Despesas Fixas</h3>
+            <div class="value text-danger" id="res-fixas" title="Gastos recorrentes obrigatórios">R$ 0,00</div>
+        </div>
+        <div class="summary-card">
+            <h3>Despesas Variáveis</h3>
+            <div class="value text-warning" id="res-variaveis" title="Gastos flexíveis e estilo de vida">R$ 0,00</div>
+        </div>
+    </div>
+
+    <!-- Gráficos e Cadastro -->
+    <div class="main-grid">
+        <div class="panel">
+            <h2>Distribuição de Despesas</h2>
+            <div class="chart-container">
+                <canvas id="graficoDespesas"></canvas>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Nova Transação</h2>
+            <div class="form-grid">
+                <input type="text" id="descricao" class="full-width" placeholder="Descrição (Ex: Fornecedor, Restaurante)">
+                <input type="number" id="valor" placeholder="Valor (R$)">
+                <input type="date" id="dataAtual">
+                <select id="tipo" onchange="atualizarCategorias()">
+                    <option value="despesa">Despesa</option>
+                    <option value="receita">Receita</option>
+                </select>
+                <select id="natureza">
+                    <option value="variavel">Variável (Pontual/Flexível)</option>
+                    <option value="fixo">Fixo (Recorrente/Obrigatório)</option>
+                </select>
+                <select id="categoria" class="full-width">
+                    <!-- Preenchido via JS -->
+                </select>
+                <button class="full-width" onclick="adicionarTransacao()">Registrar Lançamento</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inteligência Artificial Analítica e Preditiva -->
+    <div class="panel" style="margin-bottom: 25px;">
+        <h2>Visão de Futuro e Consultoria (IA)</h2>
+        <p style="color: #6B7280; margin-bottom: 15px;">A IA analisa sua proporção de gastos fixos vs variáveis e projeta o comportamento do seu caixa para os próximos meses.</p>
+        <button class="btn-ia full-width" onclick="analisarComIAPreditiva()">Gerar Projeção e Plano de Ação</button>
+        <div class="loader" id="loader">Processando segregação e calculando tendências futuras. Aguarde...</div>
+        <div id="resultado-ia"></div>
+    </div>
+
+    <!-- Lista de Histórico -->
+    <div class="panel">
+        <h2>Histórico Detalhado</h2>
+        <div id="lista-transacoes"></div>
+    </div>
+</div>
+
+<script>
+    // Configura a data de hoje no campo de data automaticamente
+    document.getElementById('dataAtual').valueAsDate = new Date();
+
+    // Dados iniciais com segregação de natureza (Fixo/Variável) e Datas
+    let transacoes = JSON.parse(localStorage.getItem('financas_preditivas')) || [
+        { id: 1, data: '2026-09-01', descricao: 'Pró-labore', valor: 9000.00, tipo: 'receita', categoria: 'Renda Principal', natureza: 'fixo' },
+        { id: 2, data: '2026-09-05', descricao: 'Alarm Center Security', valor: 450.00, tipo: 'despesa', categoria: 'Negócios', natureza: 'fixo' },
+        { id: 3, data: '2026-09-10', descricao: 'Localiza Fast Retirada', valor: 310.00, tipo: 'despesa', categoria: 'Transporte', natureza: 'variavel' },
+        { id: 4, data: '2026-09-12', descricao: 'Compra Cooktop (Parcela 2)', valor: 425.00, tipo: 'despesa', categoria: 'Casa', natureza: 'fixo' },
+        { id: 5, data: '2026-09-16', descricao: 'Ração e Brinquedo Pet', valor: 180.00, tipo: 'despesa', categoria: 'Pets', natureza: 'variavel' },
+        { id: 6, data: '2026-09-20', descricao: 'Brewteco Botafogo', valor: 210.00, tipo: 'despesa', categoria: 'Alimentação/Lazer', natureza: 'variavel' },
+        { id: 7, data: '2026-09-25', descricao: 'PSN Store (EA FC 26)', valor: 349.90, tipo: 'despesa', categoria: 'Entretenimento', natureza: 'variavel' }
+    ];
+
+    let graficoInstancia = null;
+
+    const categoriasDespesa = ['Casa', 'Transporte', 'Alimentação/Lazer', 'Negócios', 'Pets', 'Entretenimento', 'Educação', 'Outros'];
+    const categoriasReceita = ['Renda Principal', 'Investimentos', 'Vendas', 'Outros'];
+
+    function atualizarCategorias() {
+        const tipo = document.getElementById('tipo').value;
+        const selectCat = document.getElementById('categoria');
+        selectCat.innerHTML = '';
+        const opcoes = tipo === 'despesa' ? categoriasDespesa : categoriasReceita;
+        
+        opcoes.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat;
+            opt.textContent = cat;
+            selectCat.appendChild(opt);
+        });
+    }
+
+    function formatarMoeda(valor) {
+        return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function formatarData(dataString) {
+        const partes = dataString.split('-');
+        return `${partes[2]}/${partes[1]}`;
+    }
+
+    function atualizarDashboard() {
+        localStorage.setItem('financas_preditivas', JSON.stringify(transacoes));
+        
+        let totalReceitas = 0;
+        let totalDespesasFixas = 0;
+        let totalDespesasVariaveis = 0;
+        const gastosPorCategoria = {};
+
+        const lista = document.getElementById('lista-transacoes');
+        lista.innerHTML = '';
+
+        // Ordenar por data
+        const transacoesOrdenadas = [...transacoes].sort((a, b) => new Date(a.data) - new Date(b.data));
+
+        transacoesOrdenadas.slice().reverse().forEach(t => {
+            if (t.tipo === 'receita') {
+                totalReceitas += t.valor;
+            } else {
+                if(t.natureza === 'fixo') totalDespesasFixas += t.valor;
+                if(t.natureza === 'variavel') totalDespesasVariaveis += t.valor;
+                gastosPorCategoria[t.categoria] = (gastosPorCategoria[t.categoria] || 0) + t.valor;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'transacao';
+            
+            const corValor = t.tipo === 'receita' ? 'var(--success)' : 'var(--danger)';
+            const sinal = t.tipo === 'receita' ? '+' : '-';
+            const badgeNat = t.tipo === 'receita' ? '' : (t.natureza === 'fixo' ? '<span class="badge-fixo">Fixo</span>' : '<span class="badge-var">Variável</span>');
+            
+            div.innerHTML = `
+                <div class="t-data">${formatarData(t.data)}</div>
+                <div class="t-info">
+                    <strong>${t.descricao}</strong>
+                    <div class="t-badges">
+                        <span class="badge-cat">${t.categoria}</span>
+                        ${badgeNat}
+                    </div>
+                </div>
+                <div style="color: ${corValor}; font-weight: bold; font-size: 16px; text-align: right;">
+                    ${sinal} ${formatarMoeda(t.valor)}
+                </div>
+            `;
+            lista.appendChild(div);
+        });
+
+        // Atualizar Cards
+        document.getElementById('res-receitas').textContent = formatarMoeda(totalReceitas);
+        document.getElementById('res-fixas').textContent = formatarMoeda(totalDespesasFixas);
+        document.getElementById('res-variaveis').textContent = formatarMoeda(totalDespesasVariaveis);
+        
+        const saldo = totalReceitas - (totalDespesasFixas + totalDespesasVariaveis);
+        const elSaldo = document.getElementById('res-saldo');
+        elSaldo.textContent = formatarMoeda(saldo);
+        elSaldo.style.color = saldo >= 0 ? 'var(--text)' : 'var(--danger)';
+
+        renderizarGrafico(gastosPorCategoria);
+    }
+
+    function renderizarGrafico(dadosCategoria) {
+        const ctx = document.getElementById('graficoDespesas').getContext('2d');
+        if (graficoInstancia) graficoInstancia.destroy();
+
+        const labels = Object.keys(dadosCategoria);
+        const data = Object.values(dadosCategoria);
+
+        graficoInstancia = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels.length > 0 ? labels : ['Sem despesas'],
+                datasets: [{
+                    data: data.length > 0 ? data : [1],
+                    backgroundColor: ['#2563EB', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6B7280'],
+                    borderWidth: 0
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+        });
+    }
+
+    function adicionarTransacao() {
+        const descricao = document.getElementById('descricao').value;
+        const valor = parseFloat(document.getElementById('valor').value);
+        const data = document.getElementById('dataAtual').value;
+        const tipo = document.getElementById('tipo').value;
+        const natureza = document.getElementById('natureza').value;
+        const categoria = document.getElementById('categoria').value;
+
+        if (!descricao || isNaN(valor) || valor <= 0 || !data) {
+            alert('Preencha todos os campos corretamente.');
+            return;
+        }
+
+        transacoes.push({ id: Date.now(), data, descricao, valor, tipo, natureza, categoria });
+
+        document.getElementById('descricao').value = '';
+        document.getElementById('valor').value = '';
+        atualizarDashboard();
+    }
+
+    async function analisarComIAPreditiva() {
+        // INSIRA SUA CHAVE DA API AQUI PARA FUNCIONAR
+        const apiKey = 'SUA_CHAVE_API_AQUI'; 
+        
+        if (transacoes.length === 0) return alert("Adicione dados primeiro.");
+
+        document.getElementById('loader').style.display = 'block';
+        document.getElementById('resultado-ia').style.display = 'none';
+
+        // Pre-processamento analítico para a IA (Segregação de Natureza e Categoria)
+        let totalReceitas = 0; let totalFixas = 0; let totalVariaveis = 0;
+        const despesasCategoria = {};
+
+        transacoes.forEach(t => {
+            if (t.tipo === 'receita') { totalReceitas += t.valor; } 
+            else { 
+                if(t.natureza === 'fixo') totalFixas += t.valor;
+                if(t.natureza === 'variavel') totalVariaveis += t.valor;
+                despesasCategoria[t.categoria] = (despesasCategoria[t.categoria] || 0) + t.valor;
+            }
+        });
+        
+        const totalDespesas = totalFixas + totalVariaveis;
+        const %Fixo = totalDespesas > 0 ? ((totalFixas / totalDespesas) * 100).toFixed(1) : 0;
+        const %Variavel = totalDespesas > 0 ? ((totalVariaveis / totalDespesas) * 100).toFixed(1) : 0;
+
+        const resumoContexto = `
+        --- MÉTRICAS TOTAIS ---
+        Receitas: R$ ${totalReceitas}
+        Despesas Fixas (Obrigatórias): R$ ${totalFixas} (${%Fixo}% das despesas)
+        Despesas Variáveis (Flexíveis): R$ ${totalVariaveis} (${%Variavel}% das despesas)
+        Saldo Atual: R$ ${totalReceitas - totalDespesas}
+        
+        --- GASTOS POR CATEGORIA ---
+        ${Object.entries(despesasCategoria).map(([cat, val]) => `${cat}: R$ ${val}`).join('\n')}
+        
+        --- DETALHAMENTO DE LANÇAMENTOS RECENTES ---
+        ${transacoes.slice(-12).map(t => `[${t.data}]${t.tipo.toUpperCase()} (${t.natureza}):${t.descricao} - R$ ${t.valor}`).join('\n')}
+        `;
+
+        const prompt = `
+        Atue como um Diretor Financeiro (CFO). Avalie os dados segregados do usuário e gere um relatório dividido nestas 3 seções:
+
+        1. **Diagnóstico Estrutural**: Analise a proporção entre gastos fixos e variáveis. O custo de vida está muito alto (muitos fixos)? Ou o dinheiro está vazando no estilo de vida (muitos variáveis)? Aponte a categoria mais crítica.
+        2. **Projeção para os Próximos 3 Meses**: Com base no comportamento atual de gastos fixos inegociáveis e da média de gastos variáveis, faça uma previsão de tendência. Se o usuário mantiver esse exato padrão de consumo, como estará o caixa nos próximos 3 meses? Haverá sobra para investir ou risco de endividamento?
+        3. **Plano de Contenção e Crescimento**: Cite exatamente o nome dos gastos variáveis do histórico onde o usuário deve aplicar cortes imediatos, e estipule uma meta clara de economia.
+
+        Seja analítico, use formatação limpa com bullet points, sem textos introdutórios. DADOS:
+        ${resumoContexto}
+        `;
+
+        try {
+            const resposta = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+
+            const dados = await resposta.json();
+            
+            if(dados.error) throw new Error(dados.error.message);
+
+            let textoFormatado = dados.candidates[0].content.parts[0].text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)/g, '• $1');
+
+            document.getElementById('resultado-ia').innerHTML = textoFormatado;
+            document.getElementById('resultado-ia').style.display = 'block';
+        } catch (erro) {
+            document.getElementById('resultado-ia').innerHTML = `<span style="color:red">Erro na IA: Insira sua chave de API válida. ${erro.message}</span>`;
+            document.getElementById('resultado-ia').style.display = 'block';
+        } finally {
+            document.getElementById('loader').style.display = 'none';
+        }
+    }
+
+    // Inicialização
+    atualizarCategorias();
+    atualizarDashboard();
+</script>
+
+</body>
+</html>
